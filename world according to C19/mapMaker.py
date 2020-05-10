@@ -74,13 +74,15 @@ def claim(coordinate,country): #function for a country to claim a pixel for itse
         countries[country]["border"].append([x,(y-1)%2048])
 
 def dist(coordinate1,coordinate2): #distance formula
-    return (float(min(abs(coordinate1[0]-coordinate2[0]),(abs(coordinate1[0]-coordinate2[0])+2048)%2048))**2 + (float(min(abs(coordinate1[1]-coordinate2[1]),(abs(coordinate1[1]-coordinate2[1])+1536)%1536)))**2)**0.5
+    return (float(min(abs(coordinate1[0]-coordinate2[0]),(abs(coordinate1[0]-coordinate2[0])+2048)%2048))**2 + float(min(abs(coordinate1[1]-coordinate2[1]),(abs(coordinate1[1]-coordinate2[1])+1536)%1536))**2)**0.5
 
 def scorePix(coordinate,country,pathCountry): #function to score a given coordinate on how fitting it would be to have a pop hear
-    if (pathCountry in pathedAndInfected):
-        return dist(coordinate,countries[pathCountry]["center"]) - (countries[pathCountry]["numInfected"]/popUnit)**0.5/2 + dist(coordinate,countries[country]["center"])**2/(countries[country]["numInfected"]/popUnit)
+    x = int(coordinate[0])
+    y = int(coordinate[1])
+    if (pathCountry in pathedAndInfected and not countries[pathCountry]["id"] in [mapMatrix[(x+1)%2048][y],mapMatrix[(x-1)%2048][y],mapMatrix[x][(y+1)%1536],mapMatrix[x][(y-1)%1536]]):
+        return dist(coordinate,countries[pathCountry]["center"]) - (countries[pathCountry]["numInfected"]/popUnit)**0.5/2 + 10*dist(coordinate,countries[country]["center"])**3/(countries[country]["numInfected"]/popUnit)
     else:
-        return dist(coordinate,countries[country]["center"])**2/(countries[country]["numInfected"]/popUnit)
+        return 10*dist(coordinate,countries[country]["center"])**3/(countries[country]["numInfected"]/popUnit)
 
 def scoreCenter(coordinate,country): #function to score given coordinate on how fitting it would be for the country to be centered here
     for otherCountry in pathedAndInfected:
@@ -91,7 +93,7 @@ def scoreCenter(coordinate,country): #function to score given coordinate on how 
     scoreSum = 0
     for otherCountry in countries[country]["paths"].keys():
         if (otherCountry in pathedAndInfected and len(countries[otherCountry]["center"])==2):
-            scoreSum += dist(coordinate,countries[otherCountry]["center"]) - ((countries[country]["numInfected"]/popUnit)**0.5 + (countries[otherCountry]["numInfected"]/popUnit)**0.5)/2
+            scoreSum += countries[country]["paths"][otherCountry]*(dist(coordinate,countries[otherCountry]["center"]) - ((countries[country]["numInfected"]/popUnit)**0.5 + (countries[otherCountry]["numInfected"]/popUnit)**0.5)/2)
     return scoreSum
 
 def shuffle(country): #function to move country around bit by bit to try and fing the best location for the center
@@ -128,6 +130,30 @@ def shuffle(country): #function to move country around bit by bit to try and fin
                 hasMoved = True
                 pendingScore = testScore
                 pendingCenter = testCenter
+            testCenter = [(bestCenter[0]+resolution)%2048,(bestCenter[1]+resolution)%1536] 
+            testScore = scoreCenter(testCenter, country)
+            if (testScore != -1 and testScore<pendingScore):
+                hasMoved = True
+                pendingScore = testScore
+                pendingCenter = testCenter
+            testCenter = [(bestCenter[0]-resolution)%2048,(bestCenter[1]+resolution)%1536]
+            testScore = scoreCenter(testCenter, country)
+            if (testScore != -1 and testScore<pendingScore):
+                hasMoved = True
+                pendingScore = testScore
+                pendingCenter = testCenter
+            testCenter = [(bestCenter[0]+resolution)%2048,(bestCenter[1]-resolution)%1536]
+            testScore = scoreCenter(testCenter, country)
+            if (testScore != -1 and testScore<pendingScore):
+                hasMoved = True
+                pendingScore = testScore
+                pendingCenter = testCenter
+            testCenter = [(bestCenter[0]-resolution)%2048,(bestCenter[1]-resolution)%1536]
+            testScore = scoreCenter(testCenter, country)
+            if (testScore != -1 and testScore<pendingScore):
+                hasMoved = True
+                pendingScore = testScore
+                pendingCenter = testCenter
             bestCenter = pendingCenter
             bestScore = pendingScore
         resolution = resolution/2
@@ -137,7 +163,7 @@ def shuffle(country): #function to move country around bit by bit to try and fin
 today = date(2019,12,1)
 
 while today<date.today():
-    print("check for new paths")
+    print("check for new infections")
     for dataPoint in futureInfectionData: #check for new infection data
         if (dataPoint["date"]<=today):
             if (not dataPoint["country"] in countries.keys()):
@@ -155,7 +181,7 @@ while today<date.today():
             else:
                 countries[dataPoint["country"]]["numInfected"] = dataPoint["cases"]
             futureInfectionData.remove(dataPoint)
-    print("check for new infections")
+    print("check for new paths")
     for path in futurePaths: #check for new infection paths
         if (path["date"]<=today):
             if (path["countries"][0] in countries.keys()):
@@ -235,16 +261,16 @@ while today<date.today():
                     print("finding location for " + country)
                     minScore = scoreCenter([0,0],country)
                     bestCenter = [0,0]
-                    for i in range(14):
-                        for j in range(10):
-                            thisScore = scoreCenter([128+128*i,128+128*j],country)
+                    for i in range(62):
+                        for j in range(46):
+                            thisScore = scoreCenter([32+32*i,32+32*j],country)
                             if (thisScore == -1 or (minScore!=-1 and thisScore>minScore)):
                                 continue
                             minScore = thisScore
-                            bestCenter = [128+128*i,128+128*j]
+                            bestCenter = [32+32*i,32+32*j]
                             #print("new best center: " + str(bestCenter))
                     if (minScore == -1):
-                        print("could not fine center for " + country)
+                        print("could not find center for " + country)
                         break
                     else:
                         print( country + " placed at " + str(bestCenter))
@@ -290,25 +316,30 @@ while today<date.today():
             mapFinished = canPlacePops and not hasPlacedPops
             canPlacePops = canPlacePops and hasPlacedPops
     
-    if (len(pathedAndInfected) > 1):
+    if (len(pathedAndInfected) >= 1):
         print("painting picture")
         img = Image.new("RGB",(2048,1536))
         imgMatrix = img.load()
         for i in range(2048):
             for j in range(1536):
-                if (mapMatrix[i][j]!=mapMatrix[(i+1)%2048][j] or mapMatrix[i][j]!=mapMatrix[(i-1)%2048][j] or mapMatrix[i][j]!=mapMatrix[i][(j+1)%1536] or mapMatrix[i][j]!=mapMatrix[i][(j-1)%1536]):
+                if (mapMatrix[i][j]!=mapMatrix[(i+1)%2048][j] or mapMatrix[i][j]!=mapMatrix[i][(j+1)%1536]):
                     imgMatrix[i,j] = (255,255,255)
+                elif (mapMatrix[i][j]!=0):
+                    imgMatrix[i,j] = ((169*mapMatrix[i][j])%256,(121*mapMatrix[i][j])%255,(49*mapMatrix[i][j])%255)
         draw = ImageDraw.Draw(img)
         font = ImageFont.truetype("arial.ttf", 30)
         draw.text((0,0), today.isoformat(), font=font)
         draw.text((0,40), "Total Infected: "+str(worldPop), font=font)
         draw.text((0,80), "Scale (Population per Pixel): "+str(popUnit), font=font)
         for country in pathedAndInfected:
-            fontSize = int(min(30, max(10, countries[country]["numInfected"]**0.5/10)))
-            draw.text((max(countries[country]["center"][0]-len(country)/4*fontSize , 0),max(countries[country]["center"][1]-fontSize/2 , 0)), country, font=ImageFont.truetype("arial.ttf", fontSize))
-        img.show()
-        if(input("s to stop:") == 's'):
-            break
+            if (countries[country]["numInfected"]/popUnit>1024):
+                fontSize = int(min(30, max(10, countries[country]["numInfected"]**0.5/10)))
+                draw.text((max(countries[country]["center"][0]-len(country)/4*fontSize , 0),max(countries[country]["center"][1]-fontSize/2 , 0)), country, font=ImageFont.truetype("arial.ttf", fontSize))
+        #img.show()
+        img.save(str(today)+".png")
+        img.close()
+        #if(input("s to stop:") == 's'):
+        #    break
     print(today)
     #print(len(infectedCountries))
     #print(len(pathedCountries))
