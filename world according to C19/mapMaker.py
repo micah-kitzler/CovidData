@@ -64,17 +64,17 @@ def claim(coordinate,country): #function for a country to claim a pixel for itse
     y = int(coordinate[1])
     mapMatrix[x][y] = countries[country]["id"]
     countries[country]["border"].remove([x,y])
-    if (mapMatrix[(x+1)%2048][y] == 0):
+    if (mapMatrix[(x+1)%2048][y] == 0 and not [(x+1)%2048,y] in countries[country]["border"]):
         countries[country]["border"].append([(x+1)%2048,y])
-    if (mapMatrix[(x-1)%2048][y] == 0):
+    if (mapMatrix[(x-1)%2048][y] == 0 and not [(x-1)%2048,y] in countries[country]["border"]):
         countries[country]["border"].append([(x-1)%2048,y])
-    if (mapMatrix[x][(y+1)%1536] == 0):
+    if (mapMatrix[x][(y+1)%1536] == 0 and not [x,(y+1)%2048] in countries[country]["border"]):
         countries[country]["border"].append([x,(y+1)%2048])
-    if (mapMatrix[x][(y-1)%1536] == 0):
+    if (mapMatrix[x][(y-1)%1536] == 0 and not [x,(y-1)%2048] in countries[country]["border"]):
         countries[country]["border"].append([x,(y-1)%2048])
 
 def dist(coordinate1,coordinate2): #distance formula
-    return (float(min(abs(coordinate1[0]-coordinate2[0]),(abs(coordinate1[0]-coordinate2[0])+2048)%2048))**2 + float(min(abs(coordinate1[1]-coordinate2[1]),(abs(coordinate1[1]-coordinate2[1])+1536)%1536))**2)**0.5
+    return (float(min(abs(coordinate1[0]-coordinate2[0]),2048-abs(coordinate1[0]-coordinate2[0])))**2 + float(min(abs(coordinate1[1]-coordinate2[1]),1536-abs(coordinate1[1]-coordinate2[1])))**2)**0.5
 
 def scorePix(coordinate,country,pathCountry): #function to score a given coordinate on how fitting it would be to have a pop hear
     x = int(coordinate[0])
@@ -96,7 +96,7 @@ def scoreCenter(coordinate,country): #function to score given coordinate on how 
             scoreSum += countries[country]["paths"][otherCountry]*(dist(coordinate,countries[otherCountry]["center"]) - ((countries[country]["numInfected"]/popUnit)**0.5 + (countries[otherCountry]["numInfected"]/popUnit)**0.5)/2)
     return scoreSum
 
-def shuffle(country): #function to move country around bit by bit to try and fing the best location for the center
+def shuffle(country): #function to move country around bit by bit to try and find the best location for the center
     bestCenter = countries[country]["center"]
     bestScore = scoreCenter(bestCenter,country)
     resolution = 16
@@ -108,49 +108,49 @@ def shuffle(country): #function to move country around bit by bit to try and fin
             pendingCenter = bestCenter
             testCenter = [(bestCenter[0]+resolution)%2048,bestCenter[1]] 
             testScore = scoreCenter(testCenter, country)
-            if (testScore != -1 and testScore<pendingScore):
+            if (testScore != -1 and (testScore<pendingScore or pendingScore==-1)):
                 hasMoved = True
                 pendingScore = testScore
                 pendingCenter = testCenter
             testCenter = [(bestCenter[0]-resolution)%2048,bestCenter[1]]
             testScore = scoreCenter(testCenter, country)
-            if (testScore != -1 and testScore<pendingScore):
+            if (testScore != -1 and (testScore<pendingScore or pendingScore==-1)):
                 hasMoved = True
                 pendingScore = testScore
                 pendingCenter = testCenter
             testCenter = [bestCenter[0],(bestCenter[1]+resolution)%1536]
             testScore = scoreCenter(testCenter, country)
-            if (testScore != -1 and testScore<pendingScore):
+            if (testScore != -1 and (testScore<pendingScore or pendingScore==-1)):
                 hasMoved = True
                 pendingScore = testScore
                 pendingCenter = testCenter
             testCenter = [bestCenter[0],(bestCenter[1]-resolution)%1536]
             testScore = scoreCenter(testCenter, country)
-            if (testScore != -1 and testScore<pendingScore):
+            if (testScore != -1 and (testScore<pendingScore or pendingScore==-1)):
                 hasMoved = True
                 pendingScore = testScore
                 pendingCenter = testCenter
             testCenter = [(bestCenter[0]+resolution)%2048,(bestCenter[1]+resolution)%1536] 
             testScore = scoreCenter(testCenter, country)
-            if (testScore != -1 and testScore<pendingScore):
+            if (testScore != -1 and (testScore<pendingScore or pendingScore==-1)):
                 hasMoved = True
                 pendingScore = testScore
                 pendingCenter = testCenter
             testCenter = [(bestCenter[0]-resolution)%2048,(bestCenter[1]+resolution)%1536]
             testScore = scoreCenter(testCenter, country)
-            if (testScore != -1 and testScore<pendingScore):
+            if (testScore != -1 and (testScore<pendingScore or pendingScore==-1)):
                 hasMoved = True
                 pendingScore = testScore
                 pendingCenter = testCenter
             testCenter = [(bestCenter[0]+resolution)%2048,(bestCenter[1]-resolution)%1536]
             testScore = scoreCenter(testCenter, country)
-            if (testScore != -1 and testScore<pendingScore):
+            if (testScore != -1 and (testScore<pendingScore or pendingScore==-1)):
                 hasMoved = True
                 pendingScore = testScore
                 pendingCenter = testCenter
             testCenter = [(bestCenter[0]-resolution)%2048,(bestCenter[1]-resolution)%1536]
             testScore = scoreCenter(testCenter, country)
-            if (testScore != -1 and testScore<pendingScore):
+            if (testScore != -1 and (testScore<pendingScore or pendingScore==-1)):
                 hasMoved = True
                 pendingScore = testScore
                 pendingCenter = testCenter
@@ -160,12 +160,14 @@ def shuffle(country): #function to move country around bit by bit to try and fin
     countries[country]["center"] = bestCenter
     return minScore
 
-today = date(2019,12,1)
+today = date(2019,12,28)
 
 while today<date.today():
     print("check for new infections")
     for dataPoint in futureInfectionData: #check for new infection data
         if (dataPoint["date"]<=today):
+            if (dataPoint["country"] == "United States"):
+                dataPoint["country"] = "USA"
             if (not dataPoint["country"] in countries.keys()):
                 infectedCountries.append(dataPoint["country"])
                 print("infected " + dataPoint["country"])
@@ -231,10 +233,6 @@ while today<date.today():
             print(country + " now pathed and infected")
             pathedAndInfected.append(country)
             pathedCountries.remove(country)
-
-    for i in range(2048):
-        for j in range(1536):
-            mapMatrix[i][j] = 0
             
     if ("World" in countries.keys()):
         worldPop = countries["World"]["numInfected"]
@@ -246,50 +244,66 @@ while today<date.today():
         print("making map")
     else:
         print("no countries to map")
+    for country in pathedAndInfected: #decrease buffers, allows for closer countries
+        countries[country]["requestBuffer"]=max(0,countries[country]["requestBuffer"]-3)
     while (not mapFinished):
         canPlacePops = True
         print("placing country centers")
-        if (len(pathedAndInfected)==1 and len(countries[pathedAndInfected[0]]["center"])<2):
-            countries[pathedAndInfected[0]]["center"] = [1024,768]
-            countries[pathedAndInfected[0]]["border"] = [[1024,768]]
-            print("center for " + pathedAndInfected[0] + " at [1024,768]")
-        elif(len(pathedAndInfected)>1):
-            for country in pathedAndInfected:
-                countries[country]["requestBuffer"]=max(0,countries[country]["requestBuffer"]-3)
-                #place country centers for all pathed and infected countries
-                if (len(countries[country]["center"])<2): #country has not yet been placed
-                    print("finding location for " + country)
-                    minScore = scoreCenter([0,0],country)
-                    bestCenter = [0,0]
-                    for i in range(62):
-                        for j in range(46):
-                            thisScore = scoreCenter([32+32*i,32+32*j],country)
-                            if (thisScore == -1 or (minScore!=-1 and thisScore>minScore)):
-                                continue
-                            minScore = thisScore
-                            bestCenter = [32+32*i,32+32*j]
-                            #print("new best center: " + str(bestCenter))
-                    if (minScore == -1):
-                        print("could not find center for " + country)
-                        break
-                    else:
-                        print( country + " placed at " + str(bestCenter))
-                        countries[country]["center"] = bestCenter
-                newScore = shuffle(country)
-                if (newScore == -1):
-                    countries[country]["requestBuffer"]+=5
-                    canPlacePops = False
-                    mapFinished = False
-                    print(country + " is too crowded, could not shuffle to suitable center.")
-                countries[country]["border"] = [countries[country]["center"]]
+        movingCountries = True
+        while(movingCountries):
+            movingCountries = False
+            if (len(pathedAndInfected)==1 and len(countries[pathedAndInfected[0]]["center"])<2):
+                countries[pathedAndInfected[0]]["center"] = [1024,768]
+                countries[pathedAndInfected[0]]["border"] = [[1024,768]]
+                print("center for " + pathedAndInfected[0] + " at [1024,768]")
+            elif(len(pathedAndInfected)>1):
+                for country in pathedAndInfected:
+                    #place country centers for all pathed and infected countries
+                    if (len(countries[country]["center"])<2): #country has not yet been placed
+                        movingCountries = True
+                        print("finding location for " + country)
+                        minScore = scoreCenter([0,0],country)
+                        bestCenter = [0,0]
+                        for i in range(63):
+                            for j in range(47):
+                                thisScore = scoreCenter([32+32*i,32+32*j],country)
+                                if (thisScore == -1 or (minScore!=-1 and thisScore>minScore)):
+                                    continue
+                                minScore = thisScore
+                                bestCenter = [32+32*i,32+32*j]
+                                #print("new best center: " + str(bestCenter))
+                        if (minScore == -1):
+                            print("could not find center for " + country)
+                            break
+                        else:
+                            print( country + " placed at " + str(bestCenter))
+                            countries[country]["center"] = bestCenter
+                    oldCenter = countries[country]["center"]
+                    newScore = shuffle(country)
+                    if (newScore == -1):
+                        countries[country]["requestBuffer"]+=5
+                        canPlacePops = False
+                        mapFinished = False
+                        movingCountries = True
+                        print(country + " is too crowded, could not shuffle to suitable center.")
+                    countries[country]["border"] = [countries[country]["center"]]
+                    if (oldCenter != countries[country]["center"]):
+                        print(country + " shuffled from " + str(oldCenter) + " to " + str(countries[country]["center"]))
+                        movingCountries = True
         PopsPlaced = 0
         if (canPlacePops):
             print("placing pops")
+        for i in range(2048):
+            for j in range(1536):
+                mapMatrix[i][j] = 0
         while (canPlacePops):
             hasPlacedPops = False
             for country in pathedAndInfected:
                 if (countries[country]["numInfected"]<popUnit*PopsPlaced): #placed all pops for this country
                     continue
+                for coordinate in countries[country]["border"]:
+                    if (mapMatrix[int(coordinate[0])][int(coordinate[1])] != 0): #check to see if any border pixels have been claimed
+                        countries[country]["border"].remove(coordinate)
                 if (len(countries[country]["border"]) == 0): #no more place to put pops
                     print(country + " is too crowded, could not place all needed pops.")
                     canPlacePops = False
@@ -303,11 +317,11 @@ while today<date.today():
                         pathCountry = path
                         break
                     pathIndex -= countries[country]["paths"][path]
-                bestPix = countries[country]["border"][0]
-                minScore = scorePix(bestPix,country,pathCountry)
+                bestPix = []
+                minScore = -1
                 for coordinate in countries[country]["border"]:
                     thisScore = scorePix(coordinate,country,pathCountry)
-                    if (thisScore<minScore):
+                    if (thisScore<minScore or minScore == -1):
                         minScore = thisScore
                         bestPix = coordinate
                 claim(bestPix, country)
