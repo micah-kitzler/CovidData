@@ -68,10 +68,10 @@ def claim(coordinate,country): #function for a country to claim a pixel for itse
         countries[country]["border"].append([(x+1)%2048,y])
     if (mapMatrix[(x-1)%2048][y] == 0 and not [(x-1)%2048,y] in countries[country]["border"]):
         countries[country]["border"].append([(x-1)%2048,y])
-    if (mapMatrix[x][(y+1)%1536] == 0 and not [x,(y+1)%2048] in countries[country]["border"]):
-        countries[country]["border"].append([x,(y+1)%2048])
-    if (mapMatrix[x][(y-1)%1536] == 0 and not [x,(y-1)%2048] in countries[country]["border"]):
-        countries[country]["border"].append([x,(y-1)%2048])
+    if (mapMatrix[x][(y+1)%1536] == 0 and not [x,(y+1)%1536] in countries[country]["border"]):
+        countries[country]["border"].append([x,(y+1)%1536])
+    if (mapMatrix[x][(y-1)%1536] == 0 and not [x,(y-1)%1536] in countries[country]["border"]):
+        countries[country]["border"].append([x,(y-1)%1536])
 
 def dist(coordinate1,coordinate2): #distance formula
     return (float(min(abs(coordinate1[0]-coordinate2[0]),2048-abs(coordinate1[0]-coordinate2[0])))**2 + float(min(abs(coordinate1[1]-coordinate2[1]),1536-abs(coordinate1[1]-coordinate2[1])))**2)**0.5
@@ -79,22 +79,35 @@ def dist(coordinate1,coordinate2): #distance formula
 def scorePix(coordinate,country,pathCountry): #function to score a given coordinate on how fitting it would be to have a pop hear
     x = int(coordinate[0])
     y = int(coordinate[1])
-    if (pathCountry in pathedAndInfected and not countries[pathCountry]["id"] in [mapMatrix[(x+1)%2048][y],mapMatrix[(x-1)%2048][y],mapMatrix[x][(y+1)%1536],mapMatrix[x][(y-1)%1536]]):
-        return dist(coordinate,countries[pathCountry]["center"]) - (countries[pathCountry]["numInfected"]/popUnit)**0.5/2 + 10*dist(coordinate,countries[country]["center"])**3/(countries[country]["numInfected"]/popUnit)
+    if (pathCountry in pathedAndInfected and (not countries[pathCountry]["id"] in [mapMatrix[(x+1)%2048][y],mapMatrix[(x-1)%2048][y],mapMatrix[x][(y+1)%1536],mapMatrix[x][(y-1)%1536]]) and dist(coordinate,countries[country]["center"])>(countries[country]["numInfected"]/popUnit)**0.5/3):
+        return (dist(coordinate,countries[pathCountry]["center"]) - (countries[pathCountry]["numInfected"]/popUnit)**0.5/2) + 8*dist(coordinate,countries[country]["center"])**3/(countries[country]["numInfected"]/popUnit)
     else:
-        return 10*dist(coordinate,countries[country]["center"])**3/(countries[country]["numInfected"]/popUnit)
+        return 8*dist(coordinate,countries[country]["center"])**3/(countries[country]["numInfected"]/popUnit)
 
 def scoreCenter(coordinate,country): #function to score given coordinate on how fitting it would be for the country to be centered here
+    scoreMultiplier = 1
     for otherCountry in pathedAndInfected:
         if (otherCountry == country or len(countries[otherCountry]["center"])<2):
             continue
-        if (dist(coordinate,countries[otherCountry]["center"]) < ((countries[country]["numInfected"]/popUnit)**0.5 + (countries[otherCountry]["numInfected"]/popUnit)**0.5)/2 + countries[country]["requestBuffer"]/popUnit + countries[otherCountry]["requestBuffer"]/popUnit):
+        if (dist(coordinate,countries[otherCountry]["center"]) < ((countries[country]["numInfected"]/popUnit)**0.5 + (countries[otherCountry]["numInfected"]/popUnit)**0.5)/3 + countries[country]["requestBuffer"]/popUnit + countries[otherCountry]["requestBuffer"]/popUnit):
             return -1
+        if (dist(coordinate,countries[otherCountry]["center"]) < 1+((countries[country]["numInfected"]/popUnit)**0.5 + (countries[otherCountry]["numInfected"]/popUnit)**0.5)/3 + countries[country]["requestBuffer"]/popUnit + countries[otherCountry]["requestBuffer"]/popUnit):
+            scoreMultiplier = 1.1
     scoreSum = 0
     for otherCountry in countries[country]["paths"].keys():
         if (otherCountry in pathedAndInfected and len(countries[otherCountry]["center"])==2):
             scoreSum += countries[country]["paths"][otherCountry]*(dist(coordinate,countries[otherCountry]["center"]) - ((countries[country]["numInfected"]/popUnit)**0.5 + (countries[otherCountry]["numInfected"]/popUnit)**0.5)/2)
-    return scoreSum
+    return scoreSum*scoreMultiplier
+
+def crowdedScore(coordinate,country): #function to score given coordinate on how fitting it would be for the country to be centered here
+    minDist = 2048
+    for otherCountry in pathedAndInfected:
+        if (otherCountry == country or len(countries[otherCountry]["center"])<2):
+            continue
+        countryDist = dist(coordinate,countries[otherCountry]["center"]) - (((countries[country]["numInfected"]/popUnit)**0.5 + (countries[otherCountry]["numInfected"]/popUnit)**0.5)/3 + countries[country]["requestBuffer"]/popUnit + countries[otherCountry]["requestBuffer"]/popUnit)
+        if (minDist>countryDist):
+            minDist = countryDist
+    return minDist
 
 def shuffle(country): #function to move country around bit by bit to try and find the best location for the center
     bestCenter = countries[country]["center"]
@@ -158,7 +171,71 @@ def shuffle(country): #function to move country around bit by bit to try and fin
             bestScore = pendingScore
         resolution = resolution/2
     countries[country]["center"] = bestCenter
-    return minScore
+    return bestScore
+
+def crowdedShuffle(country): #function to move crowded country around to have the most space between it and other countries
+    bestCenter = countries[country]["center"]
+    bestScore = crowdedScore(bestCenter,country)
+    resolution = 4
+    while (resolution>=1):
+        hasMoved = True
+        while (hasMoved):
+            hasMoved = False
+            pendingScore = bestScore
+            pendingCenter = bestCenter
+            testCenter = [(bestCenter[0]+resolution)%2048,bestCenter[1]] 
+            testScore = crowdedScore(testCenter, country)
+            if (testScore != -1 and (testScore>pendingScore or pendingScore==-1)):
+                hasMoved = True
+                pendingScore = testScore
+                pendingCenter = testCenter
+            testCenter = [(bestCenter[0]-resolution)%2048,bestCenter[1]]
+            testScore = crowdedScore(testCenter, country)
+            if (testScore != -1 and (testScore>pendingScore or pendingScore==-1)):
+                hasMoved = True
+                pendingScore = testScore
+                pendingCenter = testCenter
+            testCenter = [bestCenter[0],(bestCenter[1]+resolution)%1536]
+            testScore = crowdedScore(testCenter, country)
+            if (testScore != -1 and (testScore>pendingScore or pendingScore==-1)):
+                hasMoved = True
+                pendingScore = testScore
+                pendingCenter = testCenter
+            testCenter = [bestCenter[0],(bestCenter[1]-resolution)%1536]
+            testScore = crowdedScore(testCenter, country)
+            if (testScore != -1 and (testScore>pendingScore or pendingScore==-1)):
+                hasMoved = True
+                pendingScore = testScore
+                pendingCenter = testCenter
+            testCenter = [(bestCenter[0]+resolution)%2048,(bestCenter[1]+resolution)%1536] 
+            testScore = crowdedScore(testCenter, country)
+            if (testScore != -1 and (testScore>pendingScore or pendingScore==-1)):
+                hasMoved = True
+                pendingScore = testScore
+                pendingCenter = testCenter
+            testCenter = [(bestCenter[0]-resolution)%2048,(bestCenter[1]+resolution)%1536]
+            testScore = crowdedScore(testCenter, country)
+            if (testScore != -1 and (testScore>pendingScore or pendingScore==-1)):
+                hasMoved = True
+                pendingScore = testScore
+                pendingCenter = testCenter
+            testCenter = [(bestCenter[0]+resolution)%2048,(bestCenter[1]-resolution)%1536]
+            testScore = crowdedScore(testCenter, country)
+            if (testScore != -1 and (testScore>pendingScore or pendingScore==-1)):
+                hasMoved = True
+                pendingScore = testScore
+                pendingCenter = testCenter
+            testCenter = [(bestCenter[0]-resolution)%2048,(bestCenter[1]-resolution)%1536]
+            testScore = crowdedScore(testCenter, country)
+            if (testScore != -1 and (testScore>pendingScore or pendingScore==-1)):
+                hasMoved = True
+                pendingScore = testScore
+                pendingCenter = testCenter
+            bestCenter = pendingCenter
+            bestScore = pendingScore
+        resolution = resolution/2
+    countries[country]["center"] = bestCenter
+    return bestScore
 
 today = date(2019,12,28)
 
@@ -250,8 +327,10 @@ while today<date.today():
         canPlacePops = True
         print("placing country centers")
         movingCountries = True
-        while(movingCountries):
+        shuffleCount = 0
+        while(movingCountries and shuffleCount<8):
             movingCountries = False
+            shuffleCount+=1
             if (len(pathedAndInfected)==1 and len(countries[pathedAndInfected[0]]["center"])<2):
                 countries[pathedAndInfected[0]]["center"] = [1024,768]
                 countries[pathedAndInfected[0]]["border"] = [[1024,768]]
@@ -280,15 +359,16 @@ while today<date.today():
                             countries[country]["center"] = bestCenter
                     oldCenter = countries[country]["center"]
                     newScore = shuffle(country)
-                    if (newScore == -1):
-                        countries[country]["requestBuffer"]+=5
-                        canPlacePops = False
+                    if (newScore == -1): #todo: implement crowded shuffle
+                        #countries[country]["requestBuffer"]+=5
                         mapFinished = False
                         movingCountries = True
+                        #shuffleCount = 0
+                        bestDistance = crowdedShuffle(country)
                         print(country + " is too crowded, could not shuffle to suitable center.")
                     countries[country]["border"] = [countries[country]["center"]]
-                    if (oldCenter != countries[country]["center"]):
-                        print(country + " shuffled from " + str(oldCenter) + " to " + str(countries[country]["center"]))
+                    if (abs(oldCenter[0]-countries[country]["center"][0]) > 1 or  abs(oldCenter[1]-countries[country]["center"][1]) > 1):
+                        #print(country + " shuffled from " + str(oldCenter) + " to " + str(countries[country]["center"]))
                         movingCountries = True
         PopsPlaced = 0
         if (canPlacePops):
@@ -305,10 +385,11 @@ while today<date.today():
                     if (mapMatrix[int(coordinate[0])][int(coordinate[1])] != 0): #check to see if any border pixels have been claimed
                         countries[country]["border"].remove(coordinate)
                 if (len(countries[country]["border"]) == 0): #no more place to put pops
-                    print(country + " is too crowded, could not place all needed pops.")
+                    print(country + " is too crowded, could only place " + str(popUnit*PopsPlaced) + " out of " + str(countries[country]["numInfected"]) + " pops.")
                     canPlacePops = False
                     mapFinished = False
                     countries[country]["requestBuffer"]+=5
+                    print("new buffer for " + country + ": " + str(countries[country]["requestBuffer"]))
                     break
                 pathIndex = PopsPlaced % countries[country]["numPaths"] #choose path for pop to move towards
                 pathCountry = ""
